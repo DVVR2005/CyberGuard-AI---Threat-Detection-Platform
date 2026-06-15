@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cyberguard-celery
+  labels:
+    app: cyberguard-celery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cyberguard-celery
+  template:
+    metadata:
+      labels:
+        app: cyberguard-celery
+    spec:
+      containers:
+      - name: celery
+        image: cyberguard-ai/platform:latest
+        imagePullPolicy: IfNotPresent
+        command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+        env:
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cyberguard-secrets
+              key: secret-key
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cyberguard-secrets
+              key: jwt-secret
+        - name: REDIS_URL
+          value: "redis://cyberguard-redis:6379/0"
+        - name: ELASTICSEARCH_URL
+          value: "http://cyberguard-elasticsearch:9200"

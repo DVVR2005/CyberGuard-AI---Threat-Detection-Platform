@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cyberguard-flask
+  labels:
+    app: cyberguard-flask
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cyberguard-flask
+  template:
+    metadata:
+      labels:
+        app: cyberguard-flask
+    spec:
+      containers:
+      - name: web
+        image: cyberguard-ai/platform:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+        env:
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cyberguard-secrets
+              key: secret-key
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cyberguard-secrets
+              key: jwt-secret
+        - name: REDIS_URL
+          value: "redis://cyberguard-redis:6379/0"
+        - name: ELASTICSEARCH_URL
+          value: "http://cyberguard-elasticsearch:9200"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cyberguard-secrets
+type: Opaque
+stringData:
+  secret-key: "enterprise-super-secret-key-signature"
+  jwt-secret: "enterprise-jwt-signing-secret-key-signature"

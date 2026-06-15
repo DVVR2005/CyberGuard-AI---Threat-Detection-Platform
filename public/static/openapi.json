@@ -1,0 +1,272 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "CyberGuard AI - Enterprise API Documentation",
+    "description": "API endpoints for the CyberGuard AI Threat Detection Platform. Enforces tenant logical isolation, Role-Based Access Control, and Swagger documentation standards.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "summary": "Register a new user account with tenant partitioning",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password", "confirm_password"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string" },
+                  "password": { "type": "string" },
+                  "confirm_password": { "type": "string" },
+                  "role": { "type": "string", "enum": ["admin", "analyst", "user"], "default": "analyst" },
+                  "tenant_name": { "type": "string", "default": "Default Org" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User registered successfully" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Authenticate user and return JWT token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Token generated successfully" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Get authenticated user profile details",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/scans": {
+      "get": {
+        "summary": "List all scans inside current tenant",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      },
+      "post": {
+        "summary": "Initiate a new security scan",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Scan complete" }
+        }
+      }
+    },
+    "/api/scans/{scan_id}": {
+      "get": {
+        "summary": "Retrieve scan details",
+        "parameters": [
+          { "name": "scan_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a scan",
+        "parameters": [
+          { "name": "scan_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Scan deleted" }
+        }
+      }
+    },
+    "/api/threat-intel/cves": {
+      "get": {
+        "summary": "Search CVE database",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "severity", "in": "query", "schema": { "type": "string" } },
+          { "name": "min_cvss", "in": "query", "schema": { "type": "number", "format": "float" } },
+          { "name": "min_epss", "in": "query", "schema": { "type": "number", "format": "float" } },
+          { "name": "sort_by", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/threat-intel/domain/{domain}": {
+      "get": {
+        "summary": "Retrieve domain reputation status",
+        "parameters": [
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/threat-intel/global-status": {
+      "get": {
+        "summary": "Get global threat levels",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "summary": "List reports in tenant workspace",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/reports/generate/{scan_id}": {
+      "post": {
+        "summary": "Generate PDF report for scan findings",
+        "parameters": [
+          { "name": "scan_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "201": { "description": "PDF created successfully" }
+        }
+      }
+    },
+    "/api/reports/{report_id}/download": {
+      "get": {
+        "summary": "Download PDF report binary",
+        "parameters": [
+          { "name": "report_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "PDF download stream" }
+        }
+      }
+    },
+    "/api/siem": {
+      "get": {
+        "summary": "Search SIEM security events logs (requires Analyst/Admin)",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "severity", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/ai/chat": {
+      "post": {
+        "summary": "Ask the CyberGuard AI cybersecurity advisor chat assistant",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                  "message": { "type": "string" },
+                  "history": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/dashboard/stats": {
+      "get": {
+        "summary": "Get dashboard metrics summary cards",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/dashboard/charts": {
+      "get": {
+        "summary": "Get data arrays for dashboard Chart.js visuals",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/dashboard/recent": {
+      "get": {
+        "summary": "Get recent scans list",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/dashboard/research-metrics": {
+      "get": {
+        "summary": "Get security research metrics statistics charts",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    }
+  }
+}
