@@ -76,7 +76,7 @@ async function loadScanHistory() {
 
         container.innerHTML = `
             <div class="table-wrapper">
-                <table class="data-table">
+                <table class="data-table" id="scan-history-table">
                     <thead>
                         <tr>
                             <th>Target URL</th>
@@ -89,17 +89,28 @@ async function loadScanHistory() {
                     </thead>
                     <tbody>
                         ${scans.map(scan => `
-                            <tr>
+                            <tr id="scan-row-${scan.id}">
                                 <td style="color:var(--text-primary);font-weight:500;">${escapeHtml(scan.target_url || scan.url)}</td>
-                                <td><span class="${getSeverityClass(getRiskSeverity(scan.risk_score))}">${scan.risk_score != null ? parseFloat(scan.risk_score).toFixed(1) : 'N/A'}</span></td>
+                                <td><span class="${getSeverityClass(getRiskSeverity(scan.risk_score))}">${scan.risk_score ?? 'N/A'}</span></td>
                                 <td><span class="grade-badge ${getGradeClass(scan.grade)}">${scan.grade || 'N/A'}</span></td>
-                                <td>${scan.vulnerabilities_found ?? scan.vulnerability_count ?? (Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities.length : scan.vulnerabilities) ?? 0}</td>
+                                <td>${scan.vulnerability_count ?? scan.vulnerabilities ?? 0}</td>
                                 <td>${formatDate(scan.created_at || scan.date)}</td>
-                                <td>
-                                    <button class="btn btn-ghost btn-sm" onclick="viewScanResults(${scan.id})">
+                                <td style="white-space:nowrap;">
+                                    <button class="btn btn-ghost btn-sm" id="view-btn-${scan.id}" onclick="toggleScanDetails(${scan.id})" title="View scan details inline">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                         View
                                     </button>
+                                    <button class="btn btn-ghost btn-sm" onclick="downloadScanReport(${scan.id})" title="Generate & download PDF report" style="margin-left:6px;color:var(--accent-cyan);">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        Report
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr id="scan-detail-row-${scan.id}" style="display:none;">
+                                <td colspan="6" style="padding:0;background:var(--bg-tertiary);">
+                                    <div id="scan-detail-content-${scan.id}" style="padding:20px;">
+                                        <div class="spinner"></div>
+                                    </div>
                                 </td>
                             </tr>
                         `).join('')}
@@ -657,4 +668,175 @@ function getRiskSeverityText(score) {
     if (score >= 40) return 'Medium';
     if (score >= 20) return 'Low';
     return 'Minimal';
+}
+
+// ============================================================
+// Toggle Inline Scan Details in History Table
+// ============================================================
+async function toggleScanDetails(scanId) {
+    const detailRow = document.getElementById(`scan-detail-row-${scanId}`);
+    const viewBtn = document.getElementById(`view-btn-${scanId}`);
+    if (!detailRow) return;
+
+    // Toggle visibility
+    const isOpen = detailRow.style.display !== 'none';
+    if (isOpen) {
+        detailRow.style.display = 'none';
+        if (viewBtn) viewBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            View`;
+        return;
+    }
+
+    // Show the row and start loading
+    detailRow.style.display = 'table-row';
+    if (viewBtn) viewBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+        Close`;
+
+    const contentEl = document.getElementById(`scan-detail-content-${scanId}`);
+    if (contentEl) contentEl.innerHTML = '<div class="spinner"></div>';
+
+    try {
+        const data = await api(`/api/scans/${scanId}`);
+        const scan = data.scan || data;
+        // Merge top-level vulnerability + risk_score into the scan object for renderScanResults compatibility
+        if (data.vulnerabilities) scan.results = scan.results || {};
+        if (data.risk_score) {
+            scan.risk_score = data.risk_score.risk_score ?? scan.risk_score;
+            scan.grade = data.risk_score.grade ?? scan.grade;
+            scan.severity_level = data.risk_score.severity_level;
+            if (!scan.results) scan.results = {};
+            scan.results.ai_explanation = data.risk_score.ai_explanation;
+            scan.results.contributing_factors = data.risk_score.contributing_factors;
+        }
+        if (data.vulnerabilities) {
+            scan.results = scan.results || {};
+            scan.results.owasp = data.vulnerabilities;
+            scan.results.vulnerabilities = data.vulnerabilities;
+        }
+        if (!scan.results) scan.results = {};
+        scan.results.ports = scan.port_results || [];
+        scan.results.ssl = scan.ssl_results || {};
+        scan.results.headers = scan.header_results || [];
+        scan.results.directories = scan.directory_results || [];
+
+        if (contentEl) {
+            contentEl.innerHTML = buildInlineScanDetails(scan);
+            // Animate risk gauge in inline view
+            setTimeout(() => animateRiskGauge(scan.risk_score), 300);
+        }
+    } catch (err) {
+        if (contentEl) contentEl.innerHTML = `<p style="color:var(--accent-red);padding:12px;">Failed to load scan details: ${escapeHtml(err.message)}</p>`;
+    }
+}
+
+// ============================================================
+// Build Inline Scan Detail HTML (tabbed, shown inside history row)
+// ============================================================
+function buildInlineScanDetails(scan) {
+    const results = scan.results || scan;
+    const ports = results.ports || results.port_scan || [];
+    const ssl = results.ssl || results.ssl_analysis || {};
+    const headers = results.headers || results.security_headers || [];
+    const dirs = results.directories || results.directory_scan || [];
+    const owaspFindings = results.owasp || results.owasp_findings || results.vulnerabilities || [];
+    const riskData = {
+        score: scan.risk_score,
+        grade: scan.grade,
+        severity: scan.severity_level || getRiskSeverityText(scan.risk_score),
+        explanation: results.ai_explanation || scan.ai_explanation || '',
+        factors: results.contributing_factors || results.risk_factors || []
+    };
+    const uid = scan.id;
+
+    return `
+        <div style="border:1px solid var(--border-primary);border-radius:10px;overflow:hidden;">
+            <!-- Inline Header -->
+            <div style="background:var(--bg-secondary);padding:14px 20px;border-bottom:1px solid var(--border-primary);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <span style="font-weight:700;color:var(--text-primary);font-size:14px;">${escapeHtml(scan.target_url || scan.url || '')}</span>
+                    <span style="margin-left:12px;" class="${getSeverityClass(getRiskSeverity(scan.risk_score))}">Risk: ${scan.risk_score ?? 'N/A'}</span>
+                    <span style="margin-left:8px;" class="grade-badge ${getGradeClass(scan.grade)}">${scan.grade || 'N/A'}</span>
+                </div>
+                <span style="font-size:12px;color:var(--text-muted);">Scan ID #${uid} &bull; ${formatDateTime(scan.created_at || scan.completed_at)}</span>
+            </div>
+            <!-- Tabs -->
+            <div class="scan-tabs" style="margin:0;border-radius:0;border-bottom:1px solid var(--border-primary);">
+                <button class="scan-tab active" onclick="switchInlineTab(event, 'itab-ports-${uid}')">Ports</button>
+                <button class="scan-tab" onclick="switchInlineTab(event, 'itab-ssl-${uid}')">SSL/TLS</button>
+                <button class="scan-tab" onclick="switchInlineTab(event, 'itab-headers-${uid}')">Headers</button>
+                <button class="scan-tab" onclick="switchInlineTab(event, 'itab-dirs-${uid}')">Directories</button>
+                <button class="scan-tab" onclick="switchInlineTab(event, 'itab-owasp-${uid}')">OWASP</button>
+                <button class="scan-tab" onclick="switchInlineTab(event, 'itab-risk-${uid}')">Risk Score</button>
+            </div>
+            <div style="padding:16px;background:var(--bg-primary);">
+                <div class="scan-tab-content active" id="itab-ports-${uid}">${renderPortsTab(ports)}</div>
+                <div class="scan-tab-content" id="itab-ssl-${uid}">${renderSSLTab(ssl)}</div>
+                <div class="scan-tab-content" id="itab-headers-${uid}">${renderHeadersTab(headers)}</div>
+                <div class="scan-tab-content" id="itab-dirs-${uid}">${renderDirectoriesTab(dirs)}</div>
+                <div class="scan-tab-content" id="itab-owasp-${uid}">${renderOWASPTab(owaspFindings)}</div>
+                <div class="scan-tab-content" id="itab-risk-${uid}">${renderRiskScoreTab(riskData)}</div>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
+// Inline Tab Switcher (scoped to inline view)
+// ============================================================
+function switchInlineTab(event, tabId) {
+    // Find the parent scan-tabs container
+    const tabsContainer = event.target.closest('.scan-tabs');
+    if (!tabsContainer) return;
+    tabsContainer.querySelectorAll('.scan-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // Find the parent content area (sibling div after scan-tabs)
+    const contentArea = tabsContainer.nextElementSibling;
+    if (!contentArea) return;
+    contentArea.querySelectorAll('.scan-tab-content').forEach(c => c.classList.remove('active'));
+    const target = document.getElementById(tabId);
+    if (target) {
+        target.classList.add('active');
+        if (tabId.startsWith('itab-risk-')) {
+            const scoreEl = target.querySelector('#risk-gauge-fill');
+            if (scoreEl) animateRiskGauge(parseInt(scoreEl.dataset.score || 0));
+        }
+    }
+}
+
+// ============================================================
+// Download Scan Report (Generate then Download PDF)
+// ============================================================
+async function downloadScanReport(scanId) {
+    try {
+        Toast.show('Generating report...', 'info', 3000);
+        // Step 1: Generate the report
+        const genData = await api(`/api/reports/generate/${scanId}`, { method: 'POST' });
+        if (!genData || (!genData.success && !genData.report)) {
+            throw new Error(genData?.error || 'Failed to generate report');
+        }
+        const reportId = genData.report?.id;
+        if (!reportId) throw new Error('No report ID returned');
+
+        // Step 2: Download the PDF
+        Toast.show('Downloading PDF...', 'info', 2000);
+        const blob = await api(`/api/reports/${reportId}/download`);
+        if (blob instanceof Blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = genData.report?.filename || `CyberGuard_Report_${scanId}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            Toast.show('Report downloaded successfully!', 'success');
+        } else {
+            throw new Error('Invalid response from download endpoint');
+        }
+    } catch (err) {
+        Toast.show(`Report failed: ${err.message}`, 'error');
+    }
 }

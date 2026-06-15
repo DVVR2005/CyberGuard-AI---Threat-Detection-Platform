@@ -179,55 +179,106 @@ def _header_footer(canvas, doc):
 # =============================================================================
 
 def _build_title_page(elements, styles, scan_data, risk_score):
-    """Build the title page."""
-    elements.append(Spacer(1, 2 * inch))
+    """Build the title page with prominent target/domain display."""
+    elements.append(Spacer(1, 1.2 * inch))
 
-    elements.append(Paragraph('🛡️ CyberGuard AI', styles['ReportTitle']))
-    elements.append(Paragraph('Security Assessment Report', styles['ReportSubtitle']))
+    elements.append(Paragraph('CyberGuard AI', styles['ReportTitle']))
+    elements.append(Paragraph('Enterprise Security Assessment Report', styles['ReportSubtitle']))
+    elements.append(HRFlowable(width='100%', thickness=2, color=CYAN))
+    elements.append(Spacer(1, 0.3 * inch))
 
-    elements.append(Spacer(1, 0.5 * inch))
+    # ── Prominent Target Banner ──────────────────────────────────
+    target_url = scan_data.get('target_url', 'N/A')
+    from urllib.parse import urlparse
+    parsed = urlparse(target_url)
+    domain_or_ip = parsed.netloc or target_url
+    scheme = parsed.scheme.upper() if parsed.scheme else 'N/A'
 
-    # Grade display
+    target_banner = [
+        [Paragraph('<b>SCAN TARGET</b>', styles['MetaLabel'])],
+        [Paragraph(f'<font size=16><b>{domain_or_ip}</b></font>', styles['BodyText2'])],
+        [Paragraph(f'Full URL: {target_url}', styles['SmallText'])],
+        [Paragraph(f'Protocol: {scheme}', styles['SmallText'])],
+    ]
+    banner_table = Table(target_banner, colWidths=[6 * inch])
+    banner_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('BOX', (0, 0), (-1, -1), 3, CYAN),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, CYAN),
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('BACKGROUND', (0, 1), (-1, -1), HexColor('#f0f9ff')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(banner_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # ── Grade + Score side by side ───────────────────────────────
     grade = risk_score.get('grade', 'N/A') if risk_score else 'N/A'
     score = risk_score.get('risk_score', 0) if risk_score else 0
     severity = risk_score.get('severity_level', 'N/A') if risk_score else 'N/A'
+    sev_color = RED if severity in ('Critical', 'High') else (YELLOW if severity == 'Medium' else GREEN)
 
     grade_data = [
-        [Paragraph(f'<b>Overall Grade</b>', styles['MetaLabel'])],
-        [Paragraph(grade, styles['GradeDisplay'])],
-        [Paragraph(f'Risk Score: {score}/100 | {severity}', styles['SmallText'])]
+        [Paragraph('<b>Overall Grade</b>', styles['MetaLabel']),
+         Paragraph('<b>Risk Score</b>', styles['MetaLabel']),
+         Paragraph('<b>Severity</b>', styles['MetaLabel'])],
+        [Paragraph(grade, styles['GradeDisplay']),
+         Paragraph(f'<font size=36><b>{score}</b></font><font size=14>/100</font>', styles['BodyText2']),
+         Paragraph(f'<font size=18><b>{severity}</b></font>', styles['BodyText2'])],
     ]
-    grade_table = Table(grade_data, colWidths=[3 * inch])
+    grade_table = Table(grade_data, colWidths=[2 * inch, 2 * inch, 2 * inch])
     grade_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('BOX', (0, 0), (-1, -1), 2, CYAN),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
         ('TOPPADDING', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor('#f8fafc')),
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('BACKGROUND', (0, 1), (-1, -1), HexColor('#f8fafc')),
+        ('TEXTCOLOR', (2, 1), (2, 1), sev_color),
     ]))
     elements.append(grade_table)
+    elements.append(Spacer(1, 0.3 * inch))
 
-    elements.append(Spacer(1, 0.5 * inch))
-
-    # Metadata table
-    target_url = scan_data.get('target_url', 'N/A')
+    # ── Full Metadata Table ──────────────────────────────────────
     scan_date = scan_data.get('completed_at', scan_data.get('created_at', 'N/A'))
+    started_at = scan_data.get('started_at', 'N/A')
+    scan_id = scan_data.get('id', 'N/A')
+    scan_status = scan_data.get('status', 'N/A')
 
     meta_data = [
-        ['Target URL:', target_url],
-        ['Scan Date:', scan_date],
-        ['Scan Type:', scan_data.get('scan_type', 'Full')],
-        ['Report Generated:', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        ['Property', 'Value'],
+        ['Scanned Target', target_url],
+        ['Domain / IP', domain_or_ip],
+        ['Protocol', scheme],
+        ['Scan ID', str(scan_id)],
+        ['Scan Type', scan_data.get('scan_type', 'Full').title()],
+        ['Scan Status', scan_status.title()],
+        ['Scan Started', started_at],
+        ['Scan Completed', scan_date],
+        ['Report Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')],
     ]
-    meta_table = Table(meta_data, colWidths=[1.8 * inch, 4.2 * inch])
+    meta_table = Table(meta_data, colWidths=[2.0 * inch, 4.0 * inch])
     meta_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), LIGHT_BLUE),
-        ('TEXTCOLOR', (1, 0), (1, -1), DARK_BLUE),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LINEBELOW', (0, 0), (-1, -2), 0.5, LIGHT_GRAY),
+        ('TEXTCOLOR', (0, 1), (0, -1), LIGHT_BLUE),
+        ('TEXTCOLOR', (1, 1), (1, -1), DARK_BLUE),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#f8fafc')]),
+        # Highlight the domain row
+        ('BACKGROUND', (1, 2), (1, 2), HexColor('#e0f2fe')),
+        ('FONTNAME', (1, 2), (1, 2), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (1, 2), (1, 2), DARK_BLUE),
     ]))
     elements.append(meta_table)
 
@@ -626,6 +677,316 @@ def _build_recommendations(elements, styles, vulnerabilities, risk_score):
     elements.append(rec_table)
 
 
+def _build_port_scan_section(elements, styles, scan_data):
+    """Build a detailed Port Scan Results section."""
+    port_results = scan_data.get('port_results', [])
+    if isinstance(port_results, str):
+        try:
+            port_results = json.loads(port_results)
+        except Exception:
+            port_results = []
+
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph('8. Port Scan Results', styles['SectionTitle']))
+    elements.append(HRFlowable(width='100%', thickness=2, color=CYAN))
+    elements.append(Spacer(1, 10))
+
+    target_url = scan_data.get('target_url', 'N/A')
+    from urllib.parse import urlparse
+    domain_or_ip = urlparse(target_url).netloc or target_url
+
+    elements.append(Paragraph(
+        f'Port scan results for target: <b>{domain_or_ip}</b>. '
+        'Identifies open services and their versions to map the attack surface.',
+        styles['BodyText2']
+    ))
+
+    if not port_results:
+        elements.append(Paragraph('No open ports detected or port scan data unavailable.', styles['BodyText2']))
+        return
+
+    open_ports = [p for p in port_results if str(p.get('state', '')).lower() == 'open']
+    elements.append(Paragraph(
+        f'Total ports scanned: <b>{len(port_results)}</b> | Open ports found: <b>{len(open_ports)}</b>',
+        styles['BodyText2']
+    ))
+
+    port_data = [['Port', 'Protocol', 'Service', 'Version / Banner', 'State', 'Risk']]
+    for p in port_results:
+        state = str(p.get('state', 'unknown')).lower()
+        service = str(p.get('service', 'Unknown'))
+        risk = 'High' if p.get('port') in (21, 23, 3389, 445, 139) else (
+               'Medium' if p.get('port') in (80, 8080, 8443) else 'Low')
+        port_data.append([
+            str(p.get('port', 'N/A')),
+            str(p.get('protocol', 'tcp')).upper(),
+            service,
+            str(p.get('version', '') or p.get('banner', '') or 'N/A')[:40],
+            state.title(),
+            risk
+        ])
+
+    port_table = Table(port_data, colWidths=[0.6*inch, 0.7*inch, 1.2*inch, 2.1*inch, 0.7*inch, 0.7*inch])
+    pt_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+        ('ALIGN', (4, 0), (5, -1), 'CENTER'),
+    ]
+    for i, row in enumerate(port_data[1:], 1):
+        risk_val = row[5]
+        if risk_val == 'High':
+            pt_style.append(('TEXTCOLOR', (5, i), (5, i), RED))
+            pt_style.append(('FONTNAME', (5, i), (5, i), 'Helvetica-Bold'))
+        elif risk_val == 'Medium':
+            pt_style.append(('TEXTCOLOR', (5, i), (5, i), ORANGE))
+        state_val = row[4].lower()
+        if state_val == 'open':
+            pt_style.append(('TEXTCOLOR', (4, i), (4, i), GREEN))
+            pt_style.append(('FONTNAME', (4, i), (4, i), 'Helvetica-Bold'))
+    port_table.setStyle(TableStyle(pt_style))
+    elements.append(port_table)
+
+
+def _build_ssl_section(elements, styles, scan_data):
+    """Build a detailed SSL/TLS Certificate Analysis section."""
+    ssl_results = scan_data.get('ssl_results', {})
+    if isinstance(ssl_results, str):
+        try:
+            ssl_results = json.loads(ssl_results)
+        except Exception:
+            ssl_results = {}
+
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph('9. SSL/TLS Certificate Analysis', styles['SectionTitle']))
+    elements.append(HRFlowable(width='100%', thickness=2, color=CYAN))
+    elements.append(Spacer(1, 10))
+
+    target_url = scan_data.get('target_url', 'N/A')
+    from urllib.parse import urlparse
+    domain_or_ip = urlparse(target_url).netloc or target_url
+
+    elements.append(Paragraph(
+        f'SSL/TLS encryption analysis for <b>{domain_or_ip}</b>. '
+        'Evaluates certificate validity, cipher strength, protocol versions, and expiry.',
+        styles['BodyText2']
+    ))
+
+    if not ssl_results:
+        elements.append(Paragraph('No SSL/TLS data available. Target may not support HTTPS.', styles['BodyText2']))
+        return
+
+    grade = ssl_results.get('grade', 'N/A')
+    valid = ssl_results.get('valid', False)
+    issuer = ssl_results.get('issuer', 'N/A')
+    expiry = ssl_results.get('expiry') or ssl_results.get('expires') or 'N/A'
+    protocol = ssl_results.get('protocol', 'N/A')
+    cipher = ssl_results.get('cipher', 'N/A')
+    key_size = ssl_results.get('key_size', 'N/A')
+    subject = ssl_results.get('subject') or domain_or_ip
+    san = ssl_results.get('san', ssl_results.get('subject_alt_names', 'N/A'))
+    if isinstance(san, list):
+        san = ', '.join(san)
+
+    ssl_data = [
+        ['Property', 'Value', 'Status'],
+        ['SSL Grade', grade, 'Good' if grade in ('A+', 'A', 'A-') else ('Fair' if grade == 'B' else 'Poor')],
+        ['Certificate Valid', 'Yes' if valid else 'No', 'Pass' if valid else 'FAIL'],
+        ['Subject (CN)', str(subject), 'Info'],
+        ['Issuer / CA', str(issuer), 'Info'],
+        ['Expiry Date', str(expiry), 'Info'],
+        ['TLS Protocol', str(protocol), 'Good' if 'TLS 1.3' in str(protocol) or 'TLS 1.2' in str(protocol) else 'FAIL'],
+        ['Cipher Suite', str(cipher)[:50], 'Info'],
+        ['Key Size (bits)', str(key_size), 'Good' if str(key_size) in ('2048', '3072', '4096') else 'Warn'],
+        ['Alt Names (SAN)', str(san)[:60], 'Info'],
+    ]
+
+    ssl_table = Table(ssl_data, colWidths=[1.8*inch, 3.2*inch, 1.0*inch])
+    ssl_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0, 1), (0, -1), LIGHT_BLUE),
+        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+    ]
+    status_colors = {'Pass': GREEN, 'Good': GREEN, 'FAIL': RED, 'Poor': RED, 'Warn': ORANGE, 'Fair': YELLOW}
+    for i, row in enumerate(ssl_data[1:], 1):
+        st = row[2]
+        col = status_colors.get(st, GRAY)
+        ssl_style.append(('TEXTCOLOR', (2, i), (2, i), col))
+        ssl_style.append(('FONTNAME', (2, i), (2, i), 'Helvetica-Bold'))
+    ssl_table.setStyle(TableStyle(ssl_style))
+    elements.append(ssl_table)
+
+    # Warnings
+    warnings = ssl_results.get('warnings', [])
+    if warnings:
+        elements.append(Spacer(1, 8))
+        elements.append(Paragraph('<b>SSL Warnings:</b>', styles['MetaLabel']))
+        for w in warnings:
+            elements.append(Paragraph(f'• {w}', styles['BodyText2']))
+
+
+def _build_headers_section(elements, styles, scan_data):
+    """Build a detailed Security Headers Analysis section."""
+    header_results = scan_data.get('header_results', [])
+    if isinstance(header_results, str):
+        try:
+            header_results = json.loads(header_results)
+        except Exception:
+            header_results = []
+
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph('10. Security Headers Analysis', styles['SectionTitle']))
+    elements.append(HRFlowable(width='100%', thickness=2, color=CYAN))
+    elements.append(Spacer(1, 10))
+
+    target_url = scan_data.get('target_url', 'N/A')
+    from urllib.parse import urlparse
+    domain_or_ip = urlparse(target_url).netloc or target_url
+
+    elements.append(Paragraph(
+        f'HTTP security header analysis for <b>{domain_or_ip}</b>. '
+        'Missing or misconfigured headers are a common attack vector for XSS, clickjacking, and MITM attacks.',
+        styles['BodyText2']
+    ))
+
+    if not header_results:
+        elements.append(Paragraph('No security header data available.', styles['BodyText2']))
+        return
+
+    pass_count = sum(1 for h in header_results if (h.get('status', '') or ('pass' if h.get('present') else 'fail')).lower() == 'pass')
+    fail_count = len(header_results) - pass_count
+    elements.append(Paragraph(
+        f'Headers checked: <b>{len(header_results)}</b> | Passed: <b>{pass_count}</b> | Failed/Missing: <b>{fail_count}</b>',
+        styles['BodyText2']
+    ))
+
+    hdr_data = [['Security Header', 'Status', 'Current Value', 'Recommendation']]
+    for h in header_results:
+        name = h.get('header') or h.get('name', 'N/A')
+        raw_status = h.get('status', '')
+        if not raw_status:
+            raw_status = 'pass' if h.get('present') else 'fail'
+        status = raw_status.upper()
+        value = str(h.get('value', 'Not Set'))[:35] or 'Not Set'
+        rec = str(h.get('recommendation') or h.get('description', ''))[:55]
+        hdr_data.append([name, status, value, rec])
+
+    hdr_table = Table(hdr_data, colWidths=[1.8*inch, 0.7*inch, 1.8*inch, 1.7*inch])
+    hdr_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]
+    for i, row in enumerate(hdr_data[1:], 1):
+        st = row[1].lower()
+        if st == 'pass':
+            hdr_style.append(('TEXTCOLOR', (1, i), (1, i), GREEN))
+        elif st == 'fail':
+            hdr_style.append(('TEXTCOLOR', (1, i), (1, i), RED))
+        else:
+            hdr_style.append(('TEXTCOLOR', (1, i), (1, i), YELLOW))
+        hdr_style.append(('FONTNAME', (1, i), (1, i), 'Helvetica-Bold'))
+    hdr_table.setStyle(TableStyle(hdr_style))
+    elements.append(hdr_table)
+
+
+def _build_directory_section(elements, styles, scan_data):
+    """Build a detailed Directory Discovery section."""
+    dir_results = scan_data.get('directory_results', [])
+    if isinstance(dir_results, str):
+        try:
+            dir_results = json.loads(dir_results)
+        except Exception:
+            dir_results = []
+
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph('11. Directory & Path Discovery', styles['SectionTitle']))
+    elements.append(HRFlowable(width='100%', thickness=2, color=CYAN))
+    elements.append(Spacer(1, 10))
+
+    target_url = scan_data.get('target_url', 'N/A')
+    from urllib.parse import urlparse
+    domain_or_ip = urlparse(target_url).netloc or target_url
+
+    elements.append(Paragraph(
+        f'Directory and file discovery results for <b>{domain_or_ip}</b>. '
+        'Exposed paths may reveal admin panels, configuration files, backups, or sensitive resources.',
+        styles['BodyText2']
+    ))
+
+    if not dir_results:
+        elements.append(Paragraph('No directory scan data available or no accessible paths found.', styles['BodyText2']))
+        return
+
+    high_risk = [d for d in dir_results if str(d.get('risk') or d.get('risk_level', '')).lower() == 'high']
+    elements.append(Paragraph(
+        f'Paths discovered: <b>{len(dir_results)}</b> | High-risk paths: <b>{len(high_risk)}</b>',
+        styles['BodyText2']
+    ))
+
+    dir_data = [['Path', 'HTTP Status', 'Content Size', 'Risk Level', 'Notes']]
+    for d in dir_results:
+        risk = str(d.get('risk') or d.get('risk_level', 'none')).lower()
+        path = str(d.get('path', 'N/A'))
+        status = str(d.get('status_code') or d.get('status', 'N/A'))
+        size = str(d.get('size') or d.get('content_length', 'N/A'))
+        notes = str(d.get('notes') or d.get('description', ''))
+        if not notes:
+            if risk == 'high':
+                notes = 'Sensitive path — review access control'
+            elif risk == 'medium':
+                notes = 'Restrict access if not public'
+            else:
+                notes = 'Accessible'
+        dir_data.append([path[:40], status, size, risk.title(), notes[:40]])
+
+    dir_table = Table(dir_data, colWidths=[2.0*inch, 0.8*inch, 0.9*inch, 0.8*inch, 1.5*inch])
+    dir_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ALIGN', (1, 0), (3, -1), 'CENTER'),
+        ('FONTNAME', (0, 1), (0, -1), 'Courier'),
+    ]
+    for i, row in enumerate(dir_data[1:], 1):
+        risk_val = row[3].lower()
+        if risk_val == 'high':
+            dir_style.append(('TEXTCOLOR', (3, i), (3, i), RED))
+            dir_style.append(('FONTNAME', (3, i), (3, i), 'Helvetica-Bold'))
+        elif risk_val == 'medium':
+            dir_style.append(('TEXTCOLOR', (3, i), (3, i), ORANGE))
+        elif risk_val == 'low':
+            dir_style.append(('TEXTCOLOR', (3, i), (3, i), GREEN))
+    dir_table.setStyle(TableStyle(dir_style))
+    elements.append(dir_table)
+
+
 def _build_appendix(elements, styles, scan_data):
     """Build the appendix with scan metadata and methodology."""
     elements.append(PageBreak())
@@ -729,6 +1090,11 @@ def generate_report(scan_data, vulnerabilities, risk_score, threat_data, output_
     _build_detailed_findings(elements, styles, vulnerabilities)
     _build_threat_intelligence(elements, styles, threat_data)
     _build_recommendations(elements, styles, vulnerabilities, risk_score)
+    # Technical detail sections
+    _build_port_scan_section(elements, styles, scan_data)
+    _build_ssl_section(elements, styles, scan_data)
+    _build_headers_section(elements, styles, scan_data)
+    _build_directory_section(elements, styles, scan_data)
     _build_appendix(elements, styles, scan_data)
 
     # Build the PDF
